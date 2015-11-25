@@ -15,6 +15,7 @@
 #include <string.h>
 #include <sys/time.h>
 #include <errno.h>
+#include <time.h>
 
 #include <pwr_dev.h>
 #include <rnet_pm_api.h>
@@ -89,47 +90,78 @@ static int pwr_wpdev_close( pwr_fd_t fd )
 
 static int pwr_wpdev_read( pwr_fd_t fd, PWR_AttrName attr, void* ptr, unsigned int len, PWR_Time* ts )
 {
-	int cap_size = 0,j;
+	int cap_size = 0,j,num_channels;
 	power_t *wp_capture = NULL,pow;
 	pwr_wpdev_t *wp_dev = PWR_WPFD(fd)->dev;
 	signal_t ch_sig = PWR_WPFD(fd)->ch.sig_type;
-	cap_size = power_instant_measure(wp_dev->wp_handle,MAIN_TASK,&wp_capture,(pm_time_t *)&ts);
+	int channel_list[MAX_NUM_CHANNELS];
+	pm_time_t time;
 
-	printf("\n--------Sample size: %d, time: %ld--------\n",cap_size,ts);
-        if(cap_size <= 0)
-       		return -1;
-        for(j=0;j<cap_size;j++){
-        	printf("%f ",wp_capture[j]);
+	if( len != sizeof(double) ) {
+        	printf( "Error: value field size of %u incorrect, should be %ld\n",len,sizeof(power_t));
+        	return -1;
+    	}
+
+	/*struct timespec tp;
+	clock_gettime(CLOCK_MONOTONIC,&tp);*/
+
+	/*DBGX("Info: Reading from WattProf channel: %d, time: %ld : %ld\n",PWR_WPFD(fd)->ch.channel,
+						tp.tv_sec,tp.tv_nsec);*/
+	DBGX("Info: Reading from WattProf channel: %d\n",PWR_WPFD(fd)->ch.channel);
+
+	if(!(num_channels = power_get_channel_list(wp_dev->wp_handle,MAIN_TASK,channel_list))){
+		ERRX("Invalid channel list for this power monitoring task\n");
+		errno = EINVAL;
+		return -1;
+	}
+
+	DBGX("Info: num_channel: %d,ch_sig %d\n",num_channels,ch_sig);
+	
+	cap_size = power_instant_measure(wp_dev->wp_handle,MAIN_TASK,&wp_capture,(pm_time_t *)&time);
+
+	DBGX("\n--------Sample size: %d, time: %ld--------\n",cap_size,time);
+        /*for(j=0;j<cap_size;j++){
+        	printf("%f * ",wp_capture[j]);
         }
+	printf("\n");*/
 
-	/*---------------------    Implemented up to HERE  ---------------------------*/
-	/*FIXME - The offset calculation here is wrong, since the channel # cannot be used to calculate
-        offset - some other means is required here*/	
-	pow = (power_t)wp_capture[PWR_WPFD(fd)->ch.channel];
-    	switch( attr ) {
+	if(cap_size <= 0){
+		ERRX("No data returned!");
+                return -1;
+	}
+
+	for(j=0;j<num_channels;j++){
+		DBGX("channel list[%d] = %d\n",j,channel_list[j]);
+		if(PWR_WPFD(fd)->ch.channel == channel_list[j])
+			break;
+	}
+	if(j == num_channels){
+		ERRX("Invalid wattprof channel number %d\n",PWR_WPFD(fd)->ch.channel);
+		errno = EINVAL;
+		return -1;
+	}
+	pow = (power_t)wp_capture[j];
+	if(attr == ch_sig){
+		*((double *)ptr) = (double)pow;//*((power_t *)ptr) = pow;
+		*ts = (PWR_Time)time;
+	}else{
+	   /*FIXME: For now returning the same for all attributes, but in fact we should return nothing if attribute does not match that of the channel.This needs to be done when power_get_sigtype is ready.*/
+    	   switch( attr ) {
         	case PWR_ATTR_VOLTAGE:
-			*((power_t *)ptr) = pow;
-            		break;
         	case PWR_ATTR_CURRENT:
-            		*((power_t *)ptr) = pow;
-            		break;
 		case PWR_ATTR_AVG_POWER:
         	case PWR_ATTR_POWER:
-			*((power_t *)ptr) = pow;
-            		break;
         	case PWR_ATTR_MIN_POWER:
-			*((power_t *)ptr) = pow;
-		        break;
 	        case PWR_ATTR_MAX_POWER:
-			*((power_t *)ptr) = pow;
-            		break;
         	case PWR_ATTR_ENERGY:
-			*((power_t *)ptr) = pow;
+			*((double *)ptr) = (double)pow;//*((power_t *)ptr) = pow;
+			*ts = (PWR_Time)time;
             		break;
         	default:
             		ERRX( "Unknown or unsupported attribute (%d)\n", attr );
             		break;
-    	}
+    	  }//switch
+	}//if
     	return PWR_RET_SUCCESS;
 }
 
@@ -146,50 +178,59 @@ static int pwr_wpdev_write( pwr_fd_t fd, PWR_AttrName type, void* ptr, unsigned 
 static int pwr_wpdev_readv( pwr_fd_t fd, unsigned int arraysize, const PWR_AttrName attrs[], void* ptr,
                         PWR_Time ts[], int status[] )
 {
-	
-	int cap_size = 0,j,i;
+	int channel_list[MAX_NUM_CHANNELS];
+	int cap_size = 0,j,i,num_channels;
 	power_t *wp_capture = NULL;
 	pwr_wpdev_t *wp_dev = PWR_WPFD(fd)->dev;
 	signal_t ch_sig = PWR_WPFD(fd)->ch.sig_type;
-	cap_size = power_instant_measure(wp_dev->wp_handle,MAIN_TASK,&wp_capture,(pm_time_t *)&ts);
+	pm_time_t time;
 
-	printf("\n--------Sample size: %d, time: %ld--------\n",cap_size,ts);
-        if(cap_size <= 0)
-       		return -1;
-        for(j=0;j<cap_size;j++){
+	DBGX("Info: Reading vector from WattProf channel: %d\n",PWR_WPFD(fd)->ch.channel);
+
+        if(!(num_channels = power_get_channel_list(wp_dev->wp_handle,MAIN_TASK,channel_list))){
+                ERRX("Invalid channel list for this power monitoring task\n");
+                return -1;
+        }
+	cap_size = power_instant_measure(wp_dev->wp_handle,MAIN_TASK,&wp_capture,(pm_time_t *)&time);
+
+	DBGX("\n--------Sample size: %d, time: %ld--------\n",cap_size,time);
+        /*for(j=0;j<cap_size;j++){
         	printf("%f ",wp_capture[j]);
         }
+	printf("\n");*/
 
+	if(cap_size <= 0){
+                ERRX("No data returned!");
+                return -1;
+        }
 	/*---------------------    Implemented up to HERE  ---------------------------*/
-	int num_channels = cap_size / arraysize;
+	for(j=0;j<num_channels;j++)
+                if(PWR_WPFD(fd)->ch.channel == channel_list[j])
+                        break;
 	for ( i = 0; i < arraysize; i++ ) {
-        /*FIXME - The offset calculation here is wrong, since the channel # cannot be used to calculate
-        offset - some other means is required here*/
-	  power_t pow = (power_t)wp_capture[i*num_channels +  PWR_WPFD(fd)->ch.channel];
-    	  switch( attrs[i] ) {
+	  power_t pow = (power_t)wp_capture[i*num_channels +  j];
+	  if(attrs[i] == ch_sig){
+		*((double *)ptr + i) = (double)pow;
+		ts[i] = (PWR_Time)time;
+	  }else{
+	  /*FIXME: For now returning the same for all attributes, but in fact we should return nothing if attribute does not match that of the channel.This needs to be done when power_get_sigtype is ready.*/	
+    	    switch( attrs[i] ) {
         	case PWR_ATTR_VOLTAGE:
-            		break;
         	case PWR_ATTR_CURRENT:
-			*((power_t *)ptr+i) = pow;
-            		break;
 		case PWR_ATTR_AVG_POWER:
         	case PWR_ATTR_POWER:
-			*((power_t *)ptr+i) = pow;
-            		break;
         	case PWR_ATTR_MIN_POWER:
-			*((power_t *)ptr+i) = pow;
-		        break;
 	        case PWR_ATTR_MAX_POWER:
-			*((power_t *)ptr+i) = pow;
-            		break;
         	case PWR_ATTR_ENERGY:
-			*((power_t *)ptr+i) = pow;
+			*((double *)ptr + i) = (double)pow;
+			ts[i] = (PWR_Time)time;
             		break;
         	default:
             		ERRX( "Unknown or unsupported attribute (%d)\n", attrs[i] );
             		break;
-    	  }
-        }
+    	    }//switch
+	  }//if
+        }//for
 	/*Need to read the ts from the capture*/
 	*ts = 0;	
     	return PWR_RET_SUCCESS;
@@ -233,7 +274,7 @@ static plugin_devops_t devOps = {
 };
 
 
-static int wpdev_parse( const char *initstr, unsigned char *saddr[], unsigned int *sport )
+static int wpdev_parse( const char *initstr, char *saddr[], unsigned int *sport )
 {
     char *token;
 
@@ -244,6 +285,7 @@ static int wpdev_parse( const char *initstr, unsigned char *saddr[], unsigned in
         ERRX( "Error: missing server address/port separator in initialization string %s\n", initstr );
         return -1;
     }
+    DBGX( "Info: retreived saddr\n");
     if( (token = strtok( NULL, ":" )) == 0x0 ) {
         ERRX( "Error: missing server address/port separator in initialization string %s\n", initstr );
         return -1;
@@ -268,16 +310,16 @@ static plugin_devops_t* pwr_wpdev_init( const char *initstr )
 	int numdevs;
 	handle_t daqh;
 	plugin_devops_t* ops;
-	char saddr[64];
+	char *saddr;
 	int sport;
 	
 	DBGX( "Info: initializing PWR WattProf library\n");
 
-	if(wpdev_parse(initstr,*saddr,sport )<0){
+	if(wpdev_parse(initstr,&saddr,&sport )<0){
 		return NULL;
 	}
 	if(strcmp(saddr,"localhost")){
-		ERRX("Remote WattProf access to %s not suppported yet!\n",*saddr);
+		ERRX("Remote WattProf access to %s not suppported yet!\n",saddr);
 	}
 
         numdevs = rnet_pm_init();
@@ -285,7 +327,7 @@ static plugin_devops_t* pwr_wpdev_init( const char *initstr )
                 ERRX("No active WattProf devices found!\n");
 		return NULL;
         }
-	
+	DBGX( "Info: init wp dev with config file %s\n",wpdev_get_config_filename(LOCAL_DEVICE));	
 	daqh = power_init(LOCAL_DEVICE,wpdev_get_config_filename(LOCAL_DEVICE));
 	if(!daqh){
 		ERRX("Unable to initialize WattProf device %d!\n",LOCAL_DEVICE);
@@ -314,10 +356,17 @@ static int pwr_wpdev_finalize( plugin_devops_t *ops )
 {
     int err;	
     pwr_wpdev_t *wp_dev = (pwr_wpdev_t *)ops->private_data;
-    if(power_stop_task(wp_dev->wp_handle,MAIN_TASK) < 0)
+    if((err = power_stop_task(wp_dev->wp_handle,MAIN_TASK)) < 0){
 	ERRX("Unable to stop measurement task on Wattprof!");	
+	goto return_label;
+    }
     power_stop_capture(wp_dev->wp_handle);
+    if(err = power_finalize(wp_dev->wp_handle)){
+	ERRX("Unable to finalize Wattprof device!");
+	goto return_label;
+    }
     err = rnet_pm_finalize();
+return_label:
     free(ops->private_data);
     free(ops);
     return err;

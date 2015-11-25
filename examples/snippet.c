@@ -56,10 +56,10 @@ int main( int argc, char** argv )
             printf( "ABORT - error occured when querying power\n" );
             exit( 0 );
         }
-        if(sample) printf( "%lg %llu\n", power, (unsigned long long)timestamp );
+        /*if(sample)*/ printf( "%lg %llu\n", power, (unsigned long long)timestamp );
 
         usleep( MICROSECONDS / freq );
     }
-
+    PWR_CntxtDestroy(cntxt);
     return 0;
 }

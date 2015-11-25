@@ -20,7 +20,9 @@ examples_config_DATA =	config/cpu-node.xml \
 			config/rapl-node.xml \
 			config/wu-node.xml \
 			config/xtpm-node.xml \
-			config/xtpm-platform.xml
+			config/xtpm-platform.xml \
+			config/wp-platform.xml \
+			config/wp-node.xml
 examples_script_DATA =	script/run_dummy_client.sh \
 			script/run_dummy_python.sh \
 			script/run_dummy.sh \

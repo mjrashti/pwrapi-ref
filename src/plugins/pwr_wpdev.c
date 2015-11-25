@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/time.h>
+#include <errno.h>
 
 #include <pwr_dev.h>
 #include <rnet_pm_api.h>
@@ -36,166 +37,184 @@
 }
 
 
-#define DEFAULT_DEVICE	0
+#define LOCAL_DEVICE	0
 #define MAIN_TASK	0
 
 typedef struct {
     handle_t wp_handle;
 } pwr_wpdev_t;
+#define PWR_WPDEV(DEV) ((pwr_wpdev_t *)(DEV))
 
 
 typedef struct {
 	pwr_wpdev_t *dev;
-	component_t component;
+	channel_t ch;
 } pwr_wpdev_fd_t;
+#define PWR_WPFD(FD) ((pwr_wpdev_fd_t *)(FD))
 
 /*openstr indicates the hw data channel with which the returning fd is associated*/
-static pwr_wpdev_fd_t pwr_wpdev_open( plugin_devops_t* ops, const char *openstr )
+pwr_fd_t pwr_wpdev_open( plugin_devops_t* ops, const char *openstr )
 {
 	
-	pwr_wpdev_fd_t *fd;
+	pwr_fd_t *fd;
 
-	channel_t channel = (channel_t)atoi(openstr);
+	
+	printf("Called %s with openstr %s\n",__FUNCTION__,openstr);
+	int channel = atoi(openstr);
         if(channel < 0 || channel >= MAX_NUM_CHANNELS){
                 errno = EINVAL;
-                return 0;
+                return NULL;
         }
 
 	fd = calloc(1,sizeof(pwr_wpdev_fd_t));
 	if(!fd){
 		ERRX("Out of memory!\n");
-		return 0;
+		return NULL;
 	}
-	fd->dev	 = (pwr_wpdev_t *)(dev->private_data);
-	fd->ch = channel;
+	PWR_WPFD(fd)->dev = PWR_WPDEV(ops->private_data);
+	PWR_WPFD(fd)->ch.channel  = channel;
+	PWR_WPFD(fd)->ch.sig_type = PWR_ATTR_NOT_SPECIFIED; 
+	//PWR_WPFD(fd)->ch.raw_type = PWR_ATTR_NOT_SPECIFIED; 
+	//TODO: Add this function to WattProf and use it instead of the above	
+	//PWR_WPFD(fd)->ch.sig_type = power_get_sigtype(channel);
 
    	return fd;
 }
 
-static int pwr_wpdev_close( pwr_wpdev_fd_t fd )
+static int pwr_wpdev_close( pwr_fd_t fd )
 {
     free( fd );
-    return 0;
+    return PWR_RET_SUCCESS;
 }
 
-static int pwr_wpdev_read( pwr_wpdev_fd_t fd, PWR_AttrName attr, void* ptr, unsigned int len, PWR_Time* ts )
+static int pwr_wpdev_read( pwr_fd_t fd, PWR_AttrName attr, void* ptr, unsigned int len, PWR_Time* ts )
 {
-	int cap_size = 0;
-	power_t *wp_capture = NULL;
-	pwr_wpdev_t *wp_dev = fd->dev;
-	channel_attr_t ch_attr = power_get_channel_attributes(fd->ch);
-	tag_hanle_t tag = power_instant_measure(wp_dev->wp_handle,MAIN_TASK,&wp_capture,&cap_size);
-	if(tag == INVALID_TAG)
-		return -1;
-	
-	/*FIXME soon: At this point returning invalid values!*/
+	int cap_size = 0,j;
+	power_t *wp_capture = NULL,pow;
+	pwr_wpdev_t *wp_dev = PWR_WPFD(fd)->dev;
+	signal_t ch_sig = PWR_WPFD(fd)->ch.sig_type;
+	cap_size = power_instant_measure(wp_dev->wp_handle,MAIN_TASK,&wp_capture,(pm_time_t *)&ts);
+
+	printf("\n--------Sample size: %d, time: %ld--------\n",cap_size,ts);
+        if(cap_size <= 0)
+       		return -1;
+        for(j=0;j<cap_size;j++){
+        	printf("%f ",wp_capture[j]);
+        }
+
+	/*---------------------    Implemented up to HERE  ---------------------------*/
+	/*FIXME - The offset calculation here is wrong, since the channel # cannot be used to calculate
+        offset - some other means is required here*/	
+	pow = (power_t)wp_capture[PWR_WPFD(fd)->ch.channel];
     	switch( attr ) {
         	case PWR_ATTR_VOLTAGE:
+			*((power_t *)ptr) = pow;
             		break;
         	case PWR_ATTR_CURRENT:
-            		*((power_t *)ptr) = (power_t)INVALID_POWER;
+            		*((power_t *)ptr) = pow;
             		break;
 		case PWR_ATTR_AVG_POWER:
         	case PWR_ATTR_POWER:
-			*((power_t *)ptr) = (power_t)INVALID_POWER;
+			*((power_t *)ptr) = pow;
             		break;
         	case PWR_ATTR_MIN_POWER:
-			*((power_t *)ptr) = (power_t)INVALID_POWER;
+			*((power_t *)ptr) = pow;
 		        break;
 	        case PWR_ATTR_MAX_POWER:
-			*((power_t *)ptr) = (power_t)INVALID_POWER;
+			*((power_t *)ptr) = pow;
             		break;
         	case PWR_ATTR_ENERGY:
-			*((power_t *)ptr) = (power_t)INVALID_POWER;
+			*((power_t *)ptr) = pow;
             		break;
         	default:
             		ERRX( "Unknown or unsupported attribute (%d)\n", attr );
             		break;
     	}
-	/*Need to read the ts from the capture*/
-	*ts = 0;	
-    	return 0;
+    	return PWR_RET_SUCCESS;
 }
 
-static int dummy_dev_write( pwr_fd_t fd, PWR_AttrName type, void* ptr, unsigned int len )
+static int pwr_wpdev_write( pwr_fd_t fd, PWR_AttrName type, void* ptr, unsigned int len )
 {
-    DBGX("type=%s %f\n",attrNameToString(type), *(double*)ptr);
-
-    ((dummyFdInfo_t*) fd)->buffers[type].values[0] = *(double*)ptr;
-    return PWR_RET_SUCCESS;
+	switch( type ) {
+        	default:
+            		printf( "Warning: unknown PWR writing attr (%u) requested\n", type );
+            		break;
+    	}	
+    	return PWR_RET_SUCCESS;
 }
 
-static int dummy_dev_readv( pwr_fd_t fd, unsigned int arraysize, const PWR_AttrName attrs[], void* buf,
+static int pwr_wpdev_readv( pwr_fd_t fd, unsigned int arraysize, const PWR_AttrName attrs[], void* ptr,
                         PWR_Time ts[], int status[] )
 {
-    int i;
-    for ( i = 0; i < arraysize; i++ ) {
+	
+	int cap_size = 0,j,i;
+	power_t *wp_capture = NULL;
+	pwr_wpdev_t *wp_dev = PWR_WPFD(fd)->dev;
+	signal_t ch_sig = PWR_WPFD(fd)->ch.sig_type;
+	cap_size = power_instant_measure(wp_dev->wp_handle,MAIN_TASK,&wp_capture,(pm_time_t *)&ts);
 
-        ((double*)buf)[i] = ((dummyFdInfo_t*) fd)->buffers[attrs[i]].values[0];
+	printf("\n--------Sample size: %d, time: %ld--------\n",cap_size,ts);
+        if(cap_size <= 0)
+       		return -1;
+        for(j=0;j<cap_size;j++){
+        	printf("%f ",wp_capture[j]);
+        }
 
-        DBGX("type=%s %f\n",attrNameToString(attrs[i]), ((double*)buf)[i]);
+	/*---------------------    Implemented up to HERE  ---------------------------*/
+	int num_channels = cap_size / arraysize;
+	for ( i = 0; i < arraysize; i++ ) {
+        /*FIXME - The offset calculation here is wrong, since the channel # cannot be used to calculate
+        offset - some other means is required here*/
+	  power_t pow = (power_t)wp_capture[i*num_channels +  PWR_WPFD(fd)->ch.channel];
+    	  switch( attrs[i] ) {
+        	case PWR_ATTR_VOLTAGE:
+            		break;
+        	case PWR_ATTR_CURRENT:
+			*((power_t *)ptr+i) = pow;
+            		break;
+		case PWR_ATTR_AVG_POWER:
+        	case PWR_ATTR_POWER:
+			*((power_t *)ptr+i) = pow;
+            		break;
+        	case PWR_ATTR_MIN_POWER:
+			*((power_t *)ptr+i) = pow;
+		        break;
+	        case PWR_ATTR_MAX_POWER:
+			*((power_t *)ptr+i) = pow;
+            		break;
+        	case PWR_ATTR_ENERGY:
+			*((power_t *)ptr+i) = pow;
+            		break;
+        	default:
+            		ERRX( "Unknown or unsupported attribute (%d)\n", attrs[i] );
+            		break;
+    	  }
+        }
+	/*Need to read the ts from the capture*/
+	*ts = 0;	
+    	return PWR_RET_SUCCESS;
 
-        ts[i] = getTime();
+}
 
-        status[i] = PWR_RET_SUCCESS;
-    }
+static int pwr_wpdev_writev( pwr_fd_t fd, unsigned int arraysize, const PWR_AttrName attrs[], void* ptr, int status[] )
+{
+	int i;
+
+    	for( i = 0; i < arraysize; i++ )
+        	status[i] = pwr_wpdev_write( fd, attrs[i], (double *)ptr+i, sizeof(double) );
+        return PWR_RET_SUCCESS;
+}
+
+static int pwr_wpdev_time( pwr_fd_t fd, PWR_Time *timestamp )
+{
+    
     return PWR_RET_SUCCESS;
 }
 
-static int dummy_dev_writev( pwr_fd_t fd, unsigned int arraysize, const PWR_AttrName attrs[], void* buf, int status[] )
+static int pwr_wpdev_clear( pwr_fd_t fd )
 {
-    int i;
-    DBGX("num attributes %d\n",arraysize);
-    for ( i = 0; i < arraysize; i++ ) {
-        DBGX("type=%s %f\n",attrNameToString(attrs[i]), ((double*)buf)[i]);
-
-        ((dummyFdInfo_t*) fd)->buffers[attrs[i]].values[0] = ((double*)buf)[i];
-
-        status[i] = PWR_RET_SUCCESS;
-    }
+    /*TODO soon - implement using a wattprof function*/
     return PWR_RET_SUCCESS;
-}
-
-static int dummy_dev_time( pwr_fd_t fd, PWR_Time *timestamp )
-{
-    DBGX("\n");
-
-    return 0;
-}
-
-static int dummy_dev_clear( pwr_fd_t fd )
-{
-    DBGX("\n");
-
-    return 0;
-}
-
-static int dummy_dev_stat_start( pwr_fd_t fd, PWR_AttrName name )
-{
-    buffer_t* ptr = &((dummyFdInfo_t*) fd)->buffers[name];
-    DBGX("\n");
-	ptr->timeStamps[0] = getTime();
-	return PWR_RET_SUCCESS;
-}
-
-static int dummy_dev_stat_stop( pwr_fd_t fd, PWR_AttrName name )
-{
-	return PWR_RET_SUCCESS;
-}
-
-static int dummy_dev_stat_clear( pwr_fd_t fd, PWR_AttrName name )
-{
-	return PWR_RET_SUCCESS;
-}
-
-static int dummy_dev_stat_get( pwr_fd_t fd, PWR_AttrName name, statOp_t op,
-                                    void* result, PWR_StatTimes* ts )
-{
-    buffer_t* ptr = &((dummyFdInfo_t*) fd)->buffers[name];
-    DBGX("\n");
-	ts->start = ptr->timeStamps[0]; 
-	ts->stop = getTime();
-	return  op(BUFFER_LEN, ptr->values,result,&ts->instant);
 }
 
 static plugin_devops_t devOps = {
@@ -213,14 +232,53 @@ static plugin_devops_t devOps = {
     .stat_clear = pwr_dev_stat_clear,/*TODO: implement the wp version*/
 };
 
-/*initstr refers to the WattProf configuration file (.rnp)*/
+
+static int wpdev_parse( const char *initstr, unsigned char *saddr[], unsigned int *sport )
+{
+    char *token;
+
+    DBGX( "Info: received initialization string %s\n", initstr );
+
+    
+    if( (*saddr = strtok( (char *)initstr, ":" )) == 0x0 ) {
+        ERRX( "Error: missing server address/port separator in initialization string %s\n", initstr );
+        return -1;
+    }
+    if( (token = strtok( NULL, ":" )) == 0x0 ) {
+        ERRX( "Error: missing server address/port separator in initialization string %s\n", initstr );
+        return -1;
+    }
+    *sport = atoi(token);
+
+    DBGX( "Info: extracted initialization string (SADDR=%08x, SPORT=%u)\n", *saddr, *sport );
+
+    return PWR_RET_SUCCESS;
+}
+
+char *wpdev_get_config_filename(int dev_no){
+	char *fname= malloc(100);
+	sprintf(fname,"dev%d_conf.rnp",dev_no);
+	return fname;
+}
+
+/*initstr refers to the WattProf board (localhost for local or IP for remote):remote port:channel
+and channel is not used here*/
 static plugin_devops_t* pwr_wpdev_init( const char *initstr )
 {
 	int numdevs;
 	handle_t daqh;
 	plugin_devops_t* ops;
+	char saddr[64];
+	int sport;
 	
 	DBGX( "Info: initializing PWR WattProf library\n");
+
+	if(wpdev_parse(initstr,*saddr,sport )<0){
+		return NULL;
+	}
+	if(strcmp(saddr,"localhost")){
+		ERRX("Remote WattProf access to %s not suppported yet!\n",*saddr);
+	}
 
         numdevs = rnet_pm_init();
         if(numdevs <=0){
@@ -228,9 +286,9 @@ static plugin_devops_t* pwr_wpdev_init( const char *initstr )
 		return NULL;
         }
 	
-	daqh = power_init(DEFAULT_DEVICE,initstr);
+	daqh = power_init(LOCAL_DEVICE,wpdev_get_config_filename(LOCAL_DEVICE));
 	if(!daqh){
-		ERRX("Unable to initialize WattProf device %d!\n",DEFAULT_DEVICE);
+		ERRX("Unable to initialize WattProf device %d!\n",LOCAL_DEVICE);
                 return NULL;
 	}
 
@@ -240,15 +298,14 @@ static plugin_devops_t* pwr_wpdev_init( const char *initstr )
 		return NULL;
 	}
         if(power_start_task(daqh,MAIN_TASK) < 0){
-		ERRX("Unable to start measurement
-task on Wattprof!");
+		ERRX("Unable to start measurement task on Wattprof!");
                 return NULL;
 	}
 	ops = calloc(1,sizeof(*ops));
 	
 	*ops = devOps;
 	ops->private_data = calloc(1,sizeof( pwr_wpdev_t ));
-	(pwr_wpdev_t *)(ops->private_data)->wp_handle = daqh;	
+	PWR_WPDEV(ops->private_data)->wp_handle = daqh;	
 	
 	return ops;
 }

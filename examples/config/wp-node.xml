@@ -1,0 +1,107 @@
+<?xml version="1.0"?>
+
+<System>
+
+<Plugins>
+    <plugin name="WattProf" lib="libpwr_wpdev.so"/>
+</Plugins>
+
+<Devices>
+    <device name="WattProf-dev" plugin="WattProf" initString="localhost:0"/>
+</Devices>
+
+<Objects>
+
+<obj name="plat" type="Platform">
+
+    <attributes>
+        <attr name="VOLTAGE" op="AVG">
+            <src type="child" name="node" />
+        </attr>
+        <attr name="CURRENT" op="AVG">
+            <src type="child" name="node" />
+        </attr>
+        <attr name="POWER" op="AVG">
+            <src type="child" name="node" />
+        </attr>
+        <attr name="MIN_POWER" op="AVG">
+            <src type="child" name="node" />
+        </attr>
+        <attr name="MAX_POWER" op="AVG">
+            <src type="child" name="node" />
+        </attr>
+        <attr name="ENERGY" op="SUM">
+            <src type="child" name="node" />
+        </attr>
+    </attributes>
+
+    <children>
+        <child name="node" />
+    </children>
+
+</obj>
+
+<obj name="plat.node" type="Node" >
+
+    <attributes>
+        <attr name="CURRENT" op="AVG" >
+            <src type="child" name="socket0" />
+        </attr>
+        <attr name="POWER" op="AVG" >
+            <src type="child" name="socket0" />
+        </attr>
+        <attr name="CURRENT1" op="AVG" >
+            <src type="child" name="socket1" />
+        </attr>
+        <attr name="POWER1" op="AVG" >
+            <src type="child" name="socket1" />
+        </attr>
+    </attributes>
+
+    <children>
+        <child name="socket0" />
+	<child name="socket1" />	
+    </children>
+
+</obj>
+
+<obj name="plat.node.socket0" type="Socket" >
+
+    <devices>
+        <dev name="wpdev6" device="WattProf-dev" openString="6" /> 
+	<dev name="wpdev7" device="WattProf-dev" openString="7" />
+    </devices>
+
+    <attributes>
+        <attr name="CURRENT" op="AVG">
+            <src type="device" name="wpdev6" />
+        </attr>
+        <attr name="POWER" op="AVG">
+            <src type="device" name="wpdev7" />
+        </attr>
+    </attributes>
+
+</obj>
+
+<obj name="plat.node.socket1" type="Socket" >
+
+    <devices>
+        <dev name="wpdev8" device="WattProf-dev" openString="8" />
+	<dev name="wpdev9" device="WattProf-dev" openString="9" />
+    </devices>
+ 
+
+    <attributes>
+        <attr name="CURRENT1" op="AVG">
+            <src type="device" name="wpdev8" />
+        </attr>
+        <attr name="POWER1" op="AVG">
+            <src type="device" name="wpdev9" />
+        </attr>
+    </attributes>
+
+</obj>
+
+
+</Objects>
+</System>

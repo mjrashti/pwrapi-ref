@@ -141,6 +141,7 @@ static int pwr_wpdev_read( pwr_fd_t fd, PWR_AttrName attr, void* ptr, unsigned i
 		return -1;
 	}
 	pow = (power_t)wp_capture[j];
+	/*In WattProf, only one signal type is assumed for each channel*/
 	if(attr == ch_sig){
 		*((double *)ptr) = (double)pow;//*((power_t *)ptr) = pow;
 		*ts = (PWR_Time)time;
@@ -248,8 +249,9 @@ static int pwr_wpdev_writev( pwr_fd_t fd, unsigned int arraysize, const PWR_Attr
 
 static int pwr_wpdev_time( pwr_fd_t fd, PWR_Time *timestamp )
 {
-    
-    return PWR_RET_SUCCESS;
+    double value;
+    /*FIXME: For now we use the read function to return time*/
+    return pwr_wpdev_read(fd, PWR_ATTR_POWER,&value ,sizeof(value), timestamp); 
 }
 
 static int pwr_wpdev_clear( pwr_fd_t fd )

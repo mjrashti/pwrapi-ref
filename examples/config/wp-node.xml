@@ -60,7 +60,7 @@
     </children>
 
 </obj>
-
+<!---  The openstring is containing the channel number for WattProf corresponding to each of the signals here. Since unlike power-insight, here multiple channels can represent current, voltage power or energy for a component. For example channel 6 is for current, and channel 7 is for power for socket0-->
 <obj name="plat.node.socket0" type="Socket" >
 
     <devices>
@@ -97,7 +97,6 @@
     </attributes>
 
 </obj>
-
 
 </Objects>
 </System>

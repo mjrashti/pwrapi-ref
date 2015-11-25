@@ -1,0 +1,27 @@
+This document summarizes the steps taken to integrate a WattProf plugin and test it.
+1 - Develop the pwr_wpdev.c which is the plugin source code. The most important function is
+the pwr_pidev_read that reads channel data. 
+
+2 - Once the plugin functions are implemented, we need to integrate the plugin into the package. This is done through adding the required information into configure.ac file, as well as Makefile.am in the src/plugins folder. 
+
+3 - Need to add file config/pwrapi_wattprof.m4 that specifies library and other dependency information.
+
+4 - Now:
+ $ autogen.sh 
+ $ configure --with-wattprof=<wattprof-library-installation-folder> --prefix=<installation folder - /usr/local is the default>
+ $ make
+ $ sudo make install
+
+will test these additions.
+
+5 - Also need to test the plugin using the examples. We used snippet.c example. First need to add a sample system configuration XML file. We created examples/config/wp-node.xml.
+
+6 - We need to modify snippet.c if needed. We needed to add Pwr_DestroyCntx to this file. Then recompile.
+
+7 - examples/scripts folder is where executable scripts are made that set environment variables and execute programs. We created run-snippet-wp.sh. Need to include PowerAPI installation folder in the LD_LIBRARY_PATH.
+
+8 - Then need to copy a WattProf board configuration file (.rnp) under the name dev0_conf.rnp in the 
+examples/scripts folder.
+
+
+

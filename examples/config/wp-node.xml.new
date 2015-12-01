@@ -60,7 +60,6 @@
     </children>
 
 </obj>
-
 <obj name="plat.node.socket0" type="Socket" >
 
     <devices>

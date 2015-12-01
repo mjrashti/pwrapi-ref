@@ -49,11 +49,11 @@ typedef struct {
 
 typedef struct {
 	pwr_wpdev_t *dev;
-	channel_t ch;
+	component_t comp;
 } pwr_wpdev_fd_t;
 #define PWR_WPFD(FD) ((pwr_wpdev_fd_t *)(FD))
 
-/*openstr indicates the hw data channel with which the returning fd is associated*/
+/*openstr indicates the component with which the returning fd is associated*/
 pwr_fd_t pwr_wpdev_open( plugin_devops_t* ops, const char *openstr )
 {
 	
@@ -61,8 +61,8 @@ pwr_fd_t pwr_wpdev_open( plugin_devops_t* ops, const char *openstr )
 
 	
 	printf("Called %s with openstr %s\n",__FUNCTION__,openstr);
-	int channel = atoi(openstr);
-        if(channel < 0 || channel >= MAX_NUM_CHANNELS){
+	int comp_id = atoi(openstr);
+        if(comp_id < 0 || comp_id >= RNET_MAX_COMPONENTS){
                 errno = EINVAL;
                 return NULL;
         }
@@ -73,11 +73,10 @@ pwr_fd_t pwr_wpdev_open( plugin_devops_t* ops, const char *openstr )
 		return NULL;
 	}
 	PWR_WPFD(fd)->dev = PWR_WPDEV(ops->private_data);
-	PWR_WPFD(fd)->ch.channel  = channel;
-	PWR_WPFD(fd)->ch.sig_type = PWR_ATTR_NOT_SPECIFIED; 
-	//PWR_WPFD(fd)->ch.raw_type = PWR_ATTR_NOT_SPECIFIED; 
-	//TODO: Add this function to WattProf and use it instead of the above	
-	//PWR_WPFD(fd)->ch.sig_type = power_get_sigtype(channel);
+	if(!power_get_component(PWR_WPFD(fd)->dev->wp_handle,comp_id,&PWR_WPFD(fd)->comp)){
+		ERRX("Error in getting the component with id %d\n",comp_id);
+		return NULL;
+	}
 
    	return fd;
 }
@@ -88,6 +87,7 @@ static int pwr_wpdev_close( pwr_fd_t fd )
     return PWR_RET_SUCCESS;
 }
 
+/*
 static int pwr_wpdev_read( pwr_fd_t fd, PWR_AttrName attr, void* ptr, unsigned int len, PWR_Time* ts )
 {
 	int cap_size = 0,j,num_channels;
@@ -102,11 +102,6 @@ static int pwr_wpdev_read( pwr_fd_t fd, PWR_AttrName attr, void* ptr, unsigned i
         	return -1;
     	}
 
-	/*struct timespec tp;
-	clock_gettime(CLOCK_MONOTONIC,&tp);*/
-
-	/*DBGX("Info: Reading from WattProf channel: %d, time: %ld : %ld\n",PWR_WPFD(fd)->ch.channel,
-						tp.tv_sec,tp.tv_nsec);*/
 	DBGX("Info: Reading from WattProf channel: %d\n",PWR_WPFD(fd)->ch.channel);
 
 	if(!(num_channels = power_get_channel_list(wp_dev->wp_handle,MAIN_TASK,channel_list))){
@@ -120,10 +115,10 @@ static int pwr_wpdev_read( pwr_fd_t fd, PWR_AttrName attr, void* ptr, unsigned i
 	cap_size = power_instant_measure(wp_dev->wp_handle,MAIN_TASK,&wp_capture,(pm_time_t *)&time);
 
 	DBGX("\n--------Sample size: %d, time: %ld--------\n",cap_size,time);
-        /*for(j=0;j<cap_size;j++){
-        	printf("%f * ",wp_capture[j]);
-        }
-	printf("\n");*/
+        //for(j=0;j<cap_size;j++){
+        //	printf("%f * ",wp_capture[j]);
+        //}
+	//printf("\n");
 
 	if(cap_size <= 0){
 		ERRX("No data returned!");
@@ -141,12 +136,12 @@ static int pwr_wpdev_read( pwr_fd_t fd, PWR_AttrName attr, void* ptr, unsigned i
 		return -1;
 	}
 	pow = (power_t)wp_capture[j];
-	/*In WattProf, only one signal type is assumed for each channel*/
+	//In WattProf, only one signal type is assumed for each channel
 	if(attr == ch_sig){
-		*((double *)ptr) = (double)pow;//*((power_t *)ptr) = pow;
+		*((double *)ptr) = (double)pow;// *((power_t *)ptr) = pow;
 		*ts = (PWR_Time)time;
 	}else{
-	   /*FIXME: For now returning the same for all attributes, but in fact we should return nothing if attribute does not match that of the channel.This needs to be done when power_get_sigtype is ready.*/
+	   //FIXME: For now returning the same for all attributes, but in fact we should return nothing if attribute does not match that of the channel.This needs to be done when power_get_sigtype is ready.
     	   switch( attr ) {
         	case PWR_ATTR_VOLTAGE:
         	case PWR_ATTR_CURRENT:
@@ -155,7 +150,7 @@ static int pwr_wpdev_read( pwr_fd_t fd, PWR_AttrName attr, void* ptr, unsigned i
         	case PWR_ATTR_MIN_POWER:
 	        case PWR_ATTR_MAX_POWER:
         	case PWR_ATTR_ENERGY:
-			*((double *)ptr) = (double)pow;//*((power_t *)ptr) = pow;
+			*((double *)ptr) = (double)pow;// *((power_t *)ptr) = pow;
 			*ts = (PWR_Time)time;
             		break;
         	default:
@@ -163,6 +158,61 @@ static int pwr_wpdev_read( pwr_fd_t fd, PWR_AttrName attr, void* ptr, unsigned i
             		break;
     	  }//switch
 	}//if
+    	return PWR_RET_SUCCESS;
+}
+*/
+
+static int pwr_wpdev_read( pwr_fd_t fd, PWR_AttrName attr, void* ptr, unsigned int len, PWR_Time* ts )
+{
+	int cap_size = 0,j,num_channels;
+	power_t *wp_capture = NULL,pow;
+	pwr_wpdev_t *wp_dev = PWR_WPFD(fd)->dev;
+	int channel_list[MAX_NUM_CHANNELS];
+	pm_time_t time;
+
+	if( len != sizeof(double) ) {
+        	printf( "Error: value field size of %u incorrect, should be %ld\n",len,sizeof(power_t));
+        	return -1;
+    	}
+
+	DBGX("Info: Reading from WattProf channel: %d\n",PWR_WPFD(fd)->comp.comp_id);
+
+	cap_size = power_instant_measure_comp(wp_dev->wp_handle,MAIN_TASK,
+			PWR_WPFD(fd)->comp.comp_id,&wp_capture,(pm_time_t *)&time);
+
+	DBGX("\n--------Sample size: %d, time: %ld--------\n",cap_size,time);
+        for(j=0;j<cap_size;j++){
+        	printf("%f * ",wp_capture[j]);
+        }
+	printf("\n");
+
+	if(cap_size <= 0){
+		ERRX("No data returned!");
+                return -1;
+	}
+	*ts = (PWR_Time)time;
+    	switch( attr ) {
+        	case PWR_ATTR_VOLTAGE:
+			*((double *)ptr) = (double)(power_t)wp_capture[SIG_VOLTAGE];
+			break; 
+        	case PWR_ATTR_CURRENT:
+			*((double *)ptr) = (double)(power_t)wp_capture[SIG_CURRENT];
+                        break;
+		case PWR_ATTR_MIN_POWER:
+                case PWR_ATTR_MAX_POWER:
+		case PWR_ATTR_AVG_POWER:
+			*((double *)ptr) = 0;//invalid
+			break;
+        	case PWR_ATTR_POWER:
+			*((double *)ptr) = (double)(power_t)wp_capture[SIG_POWER];
+                        break;
+        	case PWR_ATTR_ENERGY:
+			*((double *)ptr) = (double)(power_t)wp_capture[SIG_ENERGY];
+            		break;
+        	default:
+            		ERRX( "Unknown or unsupported attribute (%d)\n", attr );
+            		break;
+    	}//switch
     	return PWR_RET_SUCCESS;
 }
 
@@ -176,7 +226,7 @@ static int pwr_wpdev_write( pwr_fd_t fd, PWR_AttrName type, void* ptr, unsigned 
     	return PWR_RET_SUCCESS;
 }
 
-static int pwr_wpdev_readv( pwr_fd_t fd, unsigned int arraysize, const PWR_AttrName attrs[], void* ptr,
+/*static int pwr_wpdev_readv( pwr_fd_t fd, unsigned int arraysize, const PWR_AttrName attrs[], void* ptr,
                         PWR_Time ts[], int status[] )
 {
 	int channel_list[MAX_NUM_CHANNELS];
@@ -195,16 +245,15 @@ static int pwr_wpdev_readv( pwr_fd_t fd, unsigned int arraysize, const PWR_AttrN
 	cap_size = power_instant_measure(wp_dev->wp_handle,MAIN_TASK,&wp_capture,(pm_time_t *)&time);
 
 	DBGX("\n--------Sample size: %d, time: %ld--------\n",cap_size,time);
-        /*for(j=0;j<cap_size;j++){
-        	printf("%f ",wp_capture[j]);
-        }
-	printf("\n");*/
+        //for(j=0;j<cap_size;j++){
+        //	printf("%f ",wp_capture[j]);
+        //}
+	//printf("\n");
 
 	if(cap_size <= 0){
                 ERRX("No data returned!");
                 return -1;
         }
-	/*---------------------    Implemented up to HERE  ---------------------------*/
 	for(j=0;j<num_channels;j++)
                 if(PWR_WPFD(fd)->ch.channel == channel_list[j])
                         break;
@@ -214,7 +263,7 @@ static int pwr_wpdev_readv( pwr_fd_t fd, unsigned int arraysize, const PWR_AttrN
 		*((double *)ptr + i) = (double)pow;
 		ts[i] = (PWR_Time)time;
 	  }else{
-	  /*FIXME: For now returning the same for all attributes, but in fact we should return nothing if attribute does not match that of the channel.This needs to be done when power_get_sigtype is ready.*/	
+	  //FIXME: For now returning the same for all attributes, but in fact we should return nothing if attribute does not match that of the channel.This needs to be done when power_get_sigtype is ready.
     	    switch( attrs[i] ) {
         	case PWR_ATTR_VOLTAGE:
         	case PWR_ATTR_CURRENT:
@@ -232,10 +281,69 @@ static int pwr_wpdev_readv( pwr_fd_t fd, unsigned int arraysize, const PWR_AttrN
     	    }//switch
 	  }//if
         }//for
-	/*Need to read the ts from the capture*/
+	//Need to read the ts from the capture
 	*ts = 0;	
     	return PWR_RET_SUCCESS;
 
+}*/
+
+
+static int pwr_wpdev_readv( pwr_fd_t fd, unsigned int arraysize, const PWR_AttrName attrs[], void* ptr,
+                        PWR_Time ts[], int status[] )
+{
+	int cap_size = 0,i,num_channels;
+	power_t *wp_capture = NULL,pow;
+	pwr_wpdev_t *wp_dev = PWR_WPFD(fd)->dev;
+	int channel_list[MAX_NUM_CHANNELS];
+	pm_time_t time;
+
+	DBGX("Info: Readving from WattProf component: %d\n",PWR_WPFD(fd)->comp.comp_id);
+
+	cap_size = power_instant_measure_comp(wp_dev->wp_handle,MAIN_TASK,
+			PWR_WPFD(fd)->comp.comp_id,&wp_capture,(pm_time_t *)&time);
+
+	DBGX("\n--------Sample size: %d, time: %ld--------\n",cap_size,time);
+        //for(j=0;j<cap_size;j++){
+        //	printf("%f * ",wp_capture[j]);
+        //}
+	//printf("\n");
+
+	if(cap_size <= 0){
+		ERRX("No data returned!");
+                return -1;
+	}
+
+	for ( i = 0; i < arraysize; i++ ) {
+	   ts[i] = (PWR_Time)time;
+    	   switch( attrs[i] ) {
+        	case PWR_ATTR_VOLTAGE:
+			((double *)ptr)[i] = (double)(power_t)wp_capture[SIG_VOLTAGE];
+			status[i] = 0;/*FIXME: always correct?*/
+			break; 
+        	case PWR_ATTR_CURRENT:
+			((double *)ptr)[i] = (double)(power_t)wp_capture[SIG_CURRENT];
+			status[i] = 0;/*FIXME: always correct?*/
+                        break;
+		case PWR_ATTR_MIN_POWER:
+                case PWR_ATTR_MAX_POWER:
+		case PWR_ATTR_AVG_POWER:
+			((double *)ptr)[i] = 0;//invalid
+			status[i] = -1;
+			break;
+        	case PWR_ATTR_POWER:
+			((double *)ptr)[i] = (double)(power_t)wp_capture[SIG_POWER];
+			status[i] = 0;/*FIXME: always correct?*/
+                        break;
+        	case PWR_ATTR_ENERGY:
+			((double *)ptr)[i] = (double)(power_t)wp_capture[SIG_ENERGY];
+			status[i] = 0;/*FIXME: always correct?*/
+            		break;
+        	default:
+            		ERRX( "Unknown or unsupported attribute (%d)\n", attrs[i] );
+            		break;
+    	   }//switch
+	}
+    	return PWR_RET_SUCCESS;
 }
 
 static int pwr_wpdev_writev( pwr_fd_t fd, unsigned int arraysize, const PWR_AttrName attrs[], void* ptr, int status[] )

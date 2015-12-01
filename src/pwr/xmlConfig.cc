@@ -368,23 +368,18 @@ XMLNode* XmlConfig::findNodes1stChild( XMLNode* node, const std::string name )
 XMLElement* XmlConfig::findObject( const std::string name )
 {
     DBGX2(DBG_CONFIG,"`%s`\n",name.c_str());
-
 	XMLNode* node = findNodes1stChild( m_systemNode->FirstChild(), "Objects" );
-
     while ( node ) {
         XMLElement* el = static_cast<XMLElement*>(node);
-
 #if 0 
         DBGX2(DBG_CONFIG,"%s %s name=`%s`\n",el->Name(),
                 el->Attribute("type"), el->Attribute("name"));
 #endif
-
         if ( 0 == name.compare( el->Attribute("name") ) ) {
             return el;
         }
         node = node->NextSibling();
     }
-
     return NULL;
 }
 

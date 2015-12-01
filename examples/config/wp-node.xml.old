@@ -60,22 +60,20 @@
     </children>
 
 </obj>
-
+<!---  The openstring is containing the channel number for WattProf corresponding to each of the signals here. Since unlike power-insight, here multiple channels can represent current, voltage power or energy for a component. For example channel 6 is for current, and channel 7 is for power for socket0-->
 <obj name="plat.node.socket0" type="Socket" >
 
     <devices>
-	<dev name="wpdev0" device="WattProf-dev" openString="3" />
+	<dev name="wpdev7" device="WattProf-dev" openString="7" />
+        <dev name="wpdev6" device="WattProf-dev" openString="6" /> 
     </devices>
 
     <attributes>
-        <attr name="CURRENT" op="AVG">
-            <src type="device" name="wpdev0" />
+        <attr name="CURRENT" op="SUM">
+            <src type="device" name="wpdev6" />
         </attr>
-        <attr name="POWER" op="AVG">
-            <src type="device" name="wpdev0" />
-        </attr>
-	<attr name="VOLTAGE" op="AVG">
-            <src type="device" name="wpdev0" />
+        <attr name="POWER" op="SUM">
+            <src type="device" name="wpdev7" />
         </attr>
     </attributes>
 
@@ -84,19 +82,17 @@
 <obj name="plat.node.socket1" type="Socket" >
 
     <devices>
-        <dev name="wpdev1" device="WattProf-dev" openString="4" />
+        <dev name="wpdev8" device="WattProf-dev" openString="8" />
+	<dev name="wpdev9" device="WattProf-dev" openString="9" />
     </devices>
  
 
     <attributes>
-	<attr name="CURRENT" op="AVG">
-            <src type="device" name="wpdev1" />
+        <attr name="CURRENT" op="SUM">
+            <src type="device" name="wpdev8" />
         </attr>
-        <attr name="POWER" op="AVG">
-            <src type="device" name="wpdev1" />
-        </attr>
-        <attr name="VOLTAGE" op="AVG">
-            <src type="device" name="wpdev1" />
+        <attr name="POWER" op="SUM">
+            <src type="device" name="wpdev9" />
         </attr>
     </attributes>
 

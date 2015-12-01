@@ -280,7 +280,7 @@ ObjTreeNode* Cntxt::findObject( std::string name )
         }
 		assert(node);
         m_objTreeNodeMap[ name ] = node; 
-	}
+    }
     return  static_cast<ObjTreeNode*>(m_objTreeNodeMap[ name ]);
 }
 

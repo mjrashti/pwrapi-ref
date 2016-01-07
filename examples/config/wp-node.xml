@@ -6,8 +6,12 @@
     <plugin name="WattProf" lib="libpwr_wpdev.so"/>
 </Plugins>
 
-<Devices>
+<!--Devices>
     <device name="WattProf-dev" plugin="WattProf" initString="localhost:0"/>
+</Devices-->
+
+<Devices>
+    <device name="WattProf-dev" plugin="WattProf" initString="compute-0-5:8000"/>
 </Devices>
 
 <Objects>

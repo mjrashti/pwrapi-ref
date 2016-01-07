@@ -12,6 +12,7 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <string.h>
 #include <sys/time.h>
 #include <errno.h>
@@ -39,10 +40,13 @@
 
 
 #define LOCAL_DEVICE	0
+#define REMOTE_DEVICE	0
 #define MAIN_TASK	0
 
 typedef struct {
     handle_t wp_handle;
+    rnet_pm_lib *rnet_pm_api;
+    bool wp_device_local;
 } pwr_wpdev_t;
 #define PWR_WPDEV(DEV) ((pwr_wpdev_t *)(DEV))
 
@@ -53,6 +57,65 @@ typedef struct {
 } pwr_wpdev_fd_t;
 #define PWR_WPFD(FD) ((pwr_wpdev_fd_t *)(FD))
 
+static rnet_pm_lib local_lib = {
+	.pm_init = rnet_pm_init,
+	.pm_finalize = rnet_pm_finalize,
+	.power_init = power_init,
+	.power_finalize = power_finalize,
+	.power_add_task = power_add_task,
+	.power_start_task = power_start_task,
+	.power_stop_task = power_stop_task,
+	.power_get_task_opcode = power_get_task_opcode,
+	.power_set_task_callback = power_set_task_callback,
+	.power_get_task_capture_file = power_get_task_capture_file,
+	.power_get_tag_file = power_get_tag_file,
+	.power_remove_task = power_remove_task,
+	.power_start_capture = power_start_capture,
+	.power_stop_capture = power_stop_capture,
+	.power_start_measure = power_start_measure,
+	.power_end_measure = power_end_measure,
+	.power_get_measurement_period = power_get_measurement_period,
+	.power_single_measure = power_single_measure,
+	.power_instant_measure = power_instant_measure,
+	.power_instant_measure_comp = power_instant_measure_comp,
+	.power_next_measure = power_next_measure,
+	.power_get_channel_list = power_get_channel_list,
+	.power_get_components = power_get_components,
+	.power_get_component = power_get_component,
+	.power_get_num_tasks = power_get_num_tasks,
+	.power_get_channel_data = power_get_channel_data
+};
+
+static rnet_pm_lib remote_lib = {
+        .pm_init = rnet_pm_init_remote,
+        .pm_finalize = rnet_pm_finalize_remote,
+        .power_init = power_init_remote,
+        .power_finalize = power_finalize_remote,
+        .power_add_task = power_add_task_remote,
+        .power_start_task = power_start_task_remote,
+        .power_stop_task = power_stop_task_remote,
+        .power_get_task_opcode = power_get_task_opcode_remote,
+        .power_set_task_callback = power_set_task_callback_remote,
+        .power_get_task_capture_file = power_get_task_capture_file_remote,
+        .power_get_tag_file = power_get_tag_file_remote,
+        .power_remove_task = power_remove_task_remote,
+        .power_start_capture = power_start_capture_remote,
+        .power_stop_capture = power_stop_capture_remote,
+        .power_start_measure = power_start_measure_remote,
+        .power_end_measure = power_end_measure_remote,
+        .power_get_measurement_period = power_get_measurement_period_remote,
+        .power_single_measure = power_single_measure_remote,
+        .power_instant_measure = power_instant_measure_remote,
+        .power_instant_measure_comp = power_instant_measure_comp_remote,
+        .power_next_measure = power_next_measure_remote,
+        .power_get_channel_list = power_get_channel_list_remote,
+        .power_get_components = power_get_components_remote,
+        .power_get_component = power_get_component_remote,
+        .power_get_num_tasks = power_get_num_tasks_remote,
+        .power_get_channel_data = power_get_channel_data_remote
+};
+
+
 /*openstr indicates the component with which the returning fd is associated*/
 pwr_fd_t pwr_wpdev_open( plugin_devops_t* ops, const char *openstr )
 {
@@ -60,24 +123,22 @@ pwr_fd_t pwr_wpdev_open( plugin_devops_t* ops, const char *openstr )
 	pwr_fd_t *fd;
 
 	
-	printf("Called %s with openstr %s\n",__FUNCTION__,openstr);
 	int comp_id = atoi(openstr);
         if(comp_id < 0 || comp_id >= RNET_MAX_COMPONENTS){
                 errno = EINVAL;
                 return NULL;
         }
-
 	fd = calloc(1,sizeof(pwr_wpdev_fd_t));
 	if(!fd){
 		ERRX("Out of memory!\n");
 		return NULL;
 	}
 	PWR_WPFD(fd)->dev = PWR_WPDEV(ops->private_data);
-	if(!power_get_component(PWR_WPFD(fd)->dev->wp_handle,comp_id,&PWR_WPFD(fd)->comp)){
+	PWR_WPFD(fd)->comp.comp_id = comp_id;
+	if(!PWR_WPFD(fd)->dev->rnet_pm_api->power_get_component(PWR_WPFD(fd)->dev->wp_handle,comp_id,&PWR_WPFD(fd)->comp)){
 		ERRX("Error in getting the component with id %d\n",comp_id);
 		return NULL;
 	}
-
    	return fd;
 }
 
@@ -177,7 +238,7 @@ static int pwr_wpdev_read( pwr_fd_t fd, PWR_AttrName attr, void* ptr, unsigned i
 
 	DBGX("Info: Reading from WattProf channel: %d\n",PWR_WPFD(fd)->comp.comp_id);
 
-	cap_size = power_instant_measure_comp(wp_dev->wp_handle,MAIN_TASK,
+	cap_size = wp_dev->rnet_pm_api->power_instant_measure_comp(wp_dev->wp_handle,MAIN_TASK,
 			PWR_WPFD(fd)->comp.comp_id,&wp_capture,(pm_time_t *)&time);
 
 	DBGX("\n--------Sample size: %d, time: %ld--------\n",cap_size,time);
@@ -299,7 +360,7 @@ static int pwr_wpdev_readv( pwr_fd_t fd, unsigned int arraysize, const PWR_AttrN
 
 	DBGX("Info: Readving from WattProf component: %d\n",PWR_WPFD(fd)->comp.comp_id);
 
-	cap_size = power_instant_measure_comp(wp_dev->wp_handle,MAIN_TASK,
+	cap_size = wp_dev->rnet_pm_api->power_instant_measure_comp(wp_dev->wp_handle,MAIN_TASK,
 			PWR_WPFD(fd)->comp.comp_id,&wp_capture,(pm_time_t *)&time);
 
 	DBGX("\n--------Sample size: %d, time: %ld--------\n",cap_size,time);
@@ -421,7 +482,10 @@ static plugin_devops_t* pwr_wpdev_init( const char *initstr )
 	handle_t daqh;
 	plugin_devops_t* ops;
 	char *saddr;
-	int sport;
+	int sport,daq_no;
+	rnet_pm_lib *rnet_pm_api;
+	bool wp_device_local;
+	struct sockaddr local_agent;
 	
 	DBGX( "Info: initializing PWR WattProf library\n");
 
@@ -429,27 +493,37 @@ static plugin_devops_t* pwr_wpdev_init( const char *initstr )
 		return NULL;
 	}
 	if(strcmp(saddr,"localhost")){
-		ERRX("Remote WattProf access to %s not suppported yet!\n",saddr);
+		DBGX( "Info: Connecting to remote library...");
+		rnet_pm_api = &remote_lib;
+		wp_device_local = false;
+		daq_no = REMOTE_DEVICE;
+	}else{
+		DBGX( "Info: Connecting to local library...");
+		rnet_pm_api = &local_lib;
+		wp_device_local = true;
+		daq_no = LOCAL_DEVICE;
 	}
-
-        numdevs = rnet_pm_init();
+        numdevs = rnet_pm_api->pm_init();
         if(numdevs <=0){
                 ERRX("No active WattProf devices found!\n");
 		return NULL;
         }
-	DBGX( "Info: init wp dev with config file %s\n",wpdev_get_config_filename(LOCAL_DEVICE));	
-	daqh = power_init(LOCAL_DEVICE,wpdev_get_config_filename(LOCAL_DEVICE));
+	DBGX( "Info: init wp dev with config file %s, saddr %s, sport %d\n",wpdev_get_config_filename(daq_no),saddr,sport);	
+	if(wp_device_local)
+		daqh = rnet_pm_api->power_init(daq_no,wpdev_get_config_filename(daq_no));
+	else
+		daqh = rnet_pm_api->power_init(saddr,sport,wpdev_get_config_filename(daq_no),&local_agent);
 	if(!daqh){
-		ERRX("Unable to initialize WattProf device %d!\n",LOCAL_DEVICE);
+		ERRX("Unable to initialize WattProf device %d!\n",daq_no);
                 return NULL;
 	}
 
 	/*FIXME: Is this the best place for these? on in _open function calls?*/
-        if(power_start_capture(daqh) < 0){
+        if(rnet_pm_api->power_start_capture(daqh) < 0){
 		ERRX("Unable to start data capture on Wattprof!");
 		return NULL;
 	}
-        if(power_start_task(daqh,MAIN_TASK) < 0){
+        if(rnet_pm_api->power_start_task(daqh,MAIN_TASK) < 0){
 		ERRX("Unable to start measurement task on Wattprof!");
                 return NULL;
 	}
@@ -457,7 +531,9 @@ static plugin_devops_t* pwr_wpdev_init( const char *initstr )
 	
 	*ops = devOps;
 	ops->private_data = calloc(1,sizeof( pwr_wpdev_t ));
-	PWR_WPDEV(ops->private_data)->wp_handle = daqh;	
+	PWR_WPDEV(ops->private_data)->wp_handle = daqh;
+	PWR_WPDEV(ops->private_data)->rnet_pm_api = rnet_pm_api;
+	PWR_WPDEV(ops->private_data)->wp_device_local = wp_device_local;
 	
 	return ops;
 }
@@ -466,16 +542,16 @@ static int pwr_wpdev_finalize( plugin_devops_t *ops )
 {
     int err;	
     pwr_wpdev_t *wp_dev = (pwr_wpdev_t *)ops->private_data;
-    if((err = power_stop_task(wp_dev->wp_handle,MAIN_TASK)) < 0){
+    if((err = wp_dev->rnet_pm_api->power_stop_task(wp_dev->wp_handle,MAIN_TASK)) < 0){
 	ERRX("Unable to stop measurement task on Wattprof!");	
 	goto return_label;
     }
-    power_stop_capture(wp_dev->wp_handle);
-    if(err = power_finalize(wp_dev->wp_handle)){
+    wp_dev->rnet_pm_api->power_stop_capture(wp_dev->wp_handle);
+    if(err = wp_dev->rnet_pm_api->power_finalize(wp_dev->wp_handle)){
 	ERRX("Unable to finalize Wattprof device!");
 	goto return_label;
     }
-    err = rnet_pm_finalize();
+    err = wp_dev->rnet_pm_api->pm_finalize();
 return_label:
     free(ops->private_data);
     free(ops);

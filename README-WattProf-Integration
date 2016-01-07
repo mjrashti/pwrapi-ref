@@ -6,22 +6,21 @@ the pwr_pidev_read that reads channel data.
 
 3 - Need to add file config/pwrapi_wattprof.m4 that specifies library and other dependency information.
 
-4 - Now:
+4 - Now make using the following to test the above extensions:
  $ autogen.sh 
  $ configure --with-wattprof=<wattprof-library-installation-folder> --prefix=<installation folder - /usr/local is the default>
  $ make
  $ sudo make install
 
-will test these additions.
 
-5 - Also need to test the plugin using the examples. We used snippet.c example. First need to add a sample system configuration XML file. We created examples/config/wp-node.xml.
+5 - Also need to test the WattProf plugin using the PowerAPI examples. Here we use snippet.c example. First need to add a sample system configuration XML file. We created examples/config/wp-node.xml.
 
-6 - We need to modify snippet.c if needed. We needed to add Pwr_DestroyCntx to this file. Then recompile.
+6 - We may modify snippet.c if needed. In fact, we needed to add Pwr_DestroyCntx to this file. Then recompile.
 
-7 - examples/scripts folder is where executable scripts are made that set environment variables and execute programs. We created run-snippet-wp.sh. Need to include PowerAPI installation folder in the LD_LIBRARY_PATH.
+7 - The examples/scripts folder is where executable scripts live. Those scripts set environment variables and execute example programs. We created run-snippet-wp.sh in that folder to run the snippet example with the WattProf (wp) plugin. 
 
-8 - Then need to copy a WattProf board configuration file (.rnp) under the name dev0_conf.rnp in the 
-examples/scripts folder.
+8 - Note that we need to include PowerAPI installation folder in the LD_LIBRARY_PATH. After this, need to copy a WattProf board configuration file (.rnp) under the name dev0_conf.rnp in the 
+examples/scripts folder. This file will be used by the WattProf plugin to configure the board.
 
 
 

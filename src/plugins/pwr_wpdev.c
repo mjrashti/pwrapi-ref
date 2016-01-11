@@ -148,81 +148,6 @@ static int pwr_wpdev_close( pwr_fd_t fd )
     return PWR_RET_SUCCESS;
 }
 
-/*
-static int pwr_wpdev_read( pwr_fd_t fd, PWR_AttrName attr, void* ptr, unsigned int len, PWR_Time* ts )
-{
-	int cap_size = 0,j,num_channels;
-	power_t *wp_capture = NULL,pow;
-	pwr_wpdev_t *wp_dev = PWR_WPFD(fd)->dev;
-	signal_t ch_sig = PWR_WPFD(fd)->ch.sig_type;
-	int channel_list[MAX_NUM_CHANNELS];
-	pm_time_t time;
-
-	if( len != sizeof(double) ) {
-        	printf( "Error: value field size of %u incorrect, should be %ld\n",len,sizeof(power_t));
-        	return -1;
-    	}
-
-	DBGX("Info: Reading from WattProf channel: %d\n",PWR_WPFD(fd)->ch.channel);
-
-	if(!(num_channels = power_get_channel_list(wp_dev->wp_handle,MAIN_TASK,channel_list))){
-		ERRX("Invalid channel list for this power monitoring task\n");
-		errno = EINVAL;
-		return -1;
-	}
-
-	DBGX("Info: num_channel: %d,ch_sig %d\n",num_channels,ch_sig);
-	
-	cap_size = power_instant_measure(wp_dev->wp_handle,MAIN_TASK,&wp_capture,(pm_time_t *)&time);
-
-	DBGX("\n--------Sample size: %d, time: %ld--------\n",cap_size,time);
-        //for(j=0;j<cap_size;j++){
-        //	printf("%f * ",wp_capture[j]);
-        //}
-	//printf("\n");
-
-	if(cap_size <= 0){
-		ERRX("No data returned!");
-                return -1;
-	}
-
-	for(j=0;j<num_channels;j++){
-		DBGX("channel list[%d] = %d\n",j,channel_list[j]);
-		if(PWR_WPFD(fd)->ch.channel == channel_list[j])
-			break;
-	}
-	if(j == num_channels){
-		ERRX("Invalid wattprof channel number %d\n",PWR_WPFD(fd)->ch.channel);
-		errno = EINVAL;
-		return -1;
-	}
-	pow = (power_t)wp_capture[j];
-	//In WattProf, only one signal type is assumed for each channel
-	if(attr == ch_sig){
-		*((double *)ptr) = (double)pow;// *((power_t *)ptr) = pow;
-		*ts = (PWR_Time)time;
-	}else{
-	   //FIXME: For now returning the same for all attributes, but in fact we should return nothing if attribute does not match that of the channel.This needs to be done when power_get_sigtype is ready.
-    	   switch( attr ) {
-        	case PWR_ATTR_VOLTAGE:
-        	case PWR_ATTR_CURRENT:
-		case PWR_ATTR_AVG_POWER:
-        	case PWR_ATTR_POWER:
-        	case PWR_ATTR_MIN_POWER:
-	        case PWR_ATTR_MAX_POWER:
-        	case PWR_ATTR_ENERGY:
-			*((double *)ptr) = (double)pow;// *((power_t *)ptr) = pow;
-			*ts = (PWR_Time)time;
-            		break;
-        	default:
-            		ERRX( "Unknown or unsupported attribute (%d)\n", attr );
-            		break;
-    	  }//switch
-	}//if
-    	return PWR_RET_SUCCESS;
-}
-*/
-
 static int pwr_wpdev_read( pwr_fd_t fd, PWR_AttrName attr, void* ptr, unsigned int len, PWR_Time* ts )
 {
 	int cap_size = 0,j,num_channels;
@@ -287,67 +212,6 @@ static int pwr_wpdev_write( pwr_fd_t fd, PWR_AttrName type, void* ptr, unsigned 
     	return PWR_RET_SUCCESS;
 }
 
-/*static int pwr_wpdev_readv( pwr_fd_t fd, unsigned int arraysize, const PWR_AttrName attrs[], void* ptr,
-                        PWR_Time ts[], int status[] )
-{
-	int channel_list[MAX_NUM_CHANNELS];
-	int cap_size = 0,j,i,num_channels;
-	power_t *wp_capture = NULL;
-	pwr_wpdev_t *wp_dev = PWR_WPFD(fd)->dev;
-	signal_t ch_sig = PWR_WPFD(fd)->ch.sig_type;
-	pm_time_t time;
-
-	DBGX("Info: Reading vector from WattProf channel: %d\n",PWR_WPFD(fd)->ch.channel);
-
-        if(!(num_channels = power_get_channel_list(wp_dev->wp_handle,MAIN_TASK,channel_list))){
-                ERRX("Invalid channel list for this power monitoring task\n");
-                return -1;
-        }
-	cap_size = power_instant_measure(wp_dev->wp_handle,MAIN_TASK,&wp_capture,(pm_time_t *)&time);
-
-	DBGX("\n--------Sample size: %d, time: %ld--------\n",cap_size,time);
-        //for(j=0;j<cap_size;j++){
-        //	printf("%f ",wp_capture[j]);
-        //}
-	//printf("\n");
-
-	if(cap_size <= 0){
-                ERRX("No data returned!");
-                return -1;
-        }
-	for(j=0;j<num_channels;j++)
-                if(PWR_WPFD(fd)->ch.channel == channel_list[j])
-                        break;
-	for ( i = 0; i < arraysize; i++ ) {
-	  power_t pow = (power_t)wp_capture[i*num_channels +  j];
-	  if(attrs[i] == ch_sig){
-		*((double *)ptr + i) = (double)pow;
-		ts[i] = (PWR_Time)time;
-	  }else{
-	  //FIXME: For now returning the same for all attributes, but in fact we should return nothing if attribute does not match that of the channel.This needs to be done when power_get_sigtype is ready.
-    	    switch( attrs[i] ) {
-        	case PWR_ATTR_VOLTAGE:
-        	case PWR_ATTR_CURRENT:
-		case PWR_ATTR_AVG_POWER:
-        	case PWR_ATTR_POWER:
-        	case PWR_ATTR_MIN_POWER:
-	        case PWR_ATTR_MAX_POWER:
-        	case PWR_ATTR_ENERGY:
-			*((double *)ptr + i) = (double)pow;
-			ts[i] = (PWR_Time)time;
-            		break;
-        	default:
-            		ERRX( "Unknown or unsupported attribute (%d)\n", attrs[i] );
-            		break;
-    	    }//switch
-	  }//if
-        }//for
-	//Need to read the ts from the capture
-	*ts = 0;	
-    	return PWR_RET_SUCCESS;
-
-}*/
-
 
 static int pwr_wpdev_readv( pwr_fd_t fd, unsigned int arraysize, const PWR_AttrName attrs[], void* ptr,
                         PWR_Time ts[], int status[] )
@@ -364,10 +228,6 @@ static int pwr_wpdev_readv( pwr_fd_t fd, unsigned int arraysize, const PWR_AttrN
 			PWR_WPFD(fd)->comp.comp_id,&wp_capture,(pm_time_t *)&time);
 
 	DBGX("\n--------Sample size: %d, time: %ld--------\n",cap_size,time);
-        //for(j=0;j<cap_size;j++){
-        //	printf("%f * ",wp_capture[j]);
-        //}
-	//printf("\n");
 
 	if(cap_size <= 0){
 		ERRX("No data returned!");

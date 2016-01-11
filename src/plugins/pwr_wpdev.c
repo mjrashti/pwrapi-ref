@@ -157,7 +157,7 @@ static int pwr_wpdev_read( pwr_fd_t fd, PWR_AttrName attr, void* ptr, unsigned i
 	pm_time_t time;
 
 	if( len != sizeof(double) ) {
-        	printf( "Error: value field size of %u incorrect, should be %ld\n",len,sizeof(power_t));
+        	ERRX( "Error: value field size of %u incorrect, should be %ld\n",len,sizeof(power_t));
         	return -1;
     	}
 
@@ -167,10 +167,6 @@ static int pwr_wpdev_read( pwr_fd_t fd, PWR_AttrName attr, void* ptr, unsigned i
 			PWR_WPFD(fd)->comp.comp_id,&wp_capture,(pm_time_t *)&time);
 
 	DBGX("\n--------Sample size: %d, time: %ld--------\n",cap_size,time);
-        for(j=0;j<cap_size;j++){
-        	printf("%f * ",wp_capture[j]);
-        }
-	printf("\n");
 
 	if(cap_size <= 0){
 		ERRX("No data returned!");
@@ -206,7 +202,7 @@ static int pwr_wpdev_write( pwr_fd_t fd, PWR_AttrName type, void* ptr, unsigned 
 {
 	switch( type ) {
         	default:
-            		printf( "Warning: unknown PWR writing attr (%u) requested\n", type );
+            		ERRX( "Warning: unknown PWR writing attr (%u) requested\n", type );
             		break;
     	}	
     	return PWR_RET_SUCCESS;

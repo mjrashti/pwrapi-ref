@@ -58,7 +58,7 @@ int main( int argc, char** argv )
         }
         /*if(sample)*/ printf( "%lg %llu\n", power, (unsigned long long)timestamp );
 
-        usleep( MICROSECONDS / freq );
+        //usleep( MICROSECONDS / freq );
     }
     PWR_CntxtDestroy(cntxt);
     return 0;

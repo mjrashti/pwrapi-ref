@@ -43,6 +43,10 @@
 #define REMOTE_DEVICE	0
 #define MAIN_TASK	0
 
+//Make it zero if you do not want to go to card for the very last sample and want 
+//the latest sample already pushed up by the card (might be from an earlier time)
+#define READ_FROM_CARD	0
+
 typedef struct {
     handle_t wp_handle;
     rnet_pm_lib *rnet_pm_api;
@@ -79,6 +83,7 @@ static rnet_pm_lib local_lib = {
 	.power_instant_measure = power_instant_measure,
 	.power_instant_measure_comp = power_instant_measure_comp,
 	.power_next_measure = power_next_measure,
+	.power_next_measure_comp = power_next_measure_comp,
 	.power_get_channel_list = power_get_channel_list,
 	.power_get_components = power_get_components,
 	.power_get_component = power_get_component,
@@ -108,6 +113,7 @@ static rnet_pm_lib remote_lib = {
         .power_instant_measure = power_instant_measure_remote,
         .power_instant_measure_comp = power_instant_measure_comp_remote,
         .power_next_measure = power_next_measure_remote,
+	.power_next_measure_comp = power_next_measure_comp_remote,
         .power_get_channel_list = power_get_channel_list_remote,
         .power_get_components = power_get_components_remote,
         .power_get_component = power_get_component_remote,
@@ -163,10 +169,15 @@ static int pwr_wpdev_read( pwr_fd_t fd, PWR_AttrName attr, void* ptr, unsigned i
 
 	DBGX("Info: Reading from WattProf channel: %d\n",PWR_WPFD(fd)->comp.comp_id);
 
+
 	cap_size = wp_dev->rnet_pm_api->power_instant_measure_comp(wp_dev->wp_handle,MAIN_TASK,
-			PWR_WPFD(fd)->comp.comp_id,&wp_capture,(pm_time_t *)&time);
+			PWR_WPFD(fd)->comp.comp_id,&wp_capture,(pm_time_t *)&time,READ_FROM_CARD);
+	
 
 	DBGX("\n--------Sample size: %d, time: %ld--------\n",cap_size,time);
+	for(j=0;j<cap_size;j++)	
+		printf("%f ",*(wp_capture + j));
+	printf(" Time: %ld \n",time);
 
 	if(cap_size <= 0){
 		ERRX("No data returned!");
@@ -220,8 +231,9 @@ static int pwr_wpdev_readv( pwr_fd_t fd, unsigned int arraysize, const PWR_AttrN
 
 	DBGX("Info: Readving from WattProf component: %d\n",PWR_WPFD(fd)->comp.comp_id);
 
+
 	cap_size = wp_dev->rnet_pm_api->power_instant_measure_comp(wp_dev->wp_handle,MAIN_TASK,
-			PWR_WPFD(fd)->comp.comp_id,&wp_capture,(pm_time_t *)&time);
+			PWR_WPFD(fd)->comp.comp_id,&wp_capture,(pm_time_t *)&time,READ_FROM_CARD);
 
 	DBGX("\n--------Sample size: %d, time: %ld--------\n",cap_size,time);
 

@@ -50,12 +50,12 @@ int main( int argc, char** argv )
         printf( "ABORT - error occured when getting entry point\n" );
         exit( 0 );
     }
-
     for( sample = 0; sample < samples; sample++ ) {
         if( PWR_ObjAttrGetValue( self, PWR_ATTR_POWER, &power, &timestamp ) != 0 ) {
             printf( "ABORT - error occured when querying power\n" );
             exit( 0 );
         }
+	if(!sample) sleep(2);
         /*if(sample)*/ printf( "%lg %llu\n", power, (unsigned long long)timestamp );
 
         //usleep( MICROSECONDS / freq );

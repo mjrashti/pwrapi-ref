@@ -50,17 +50,21 @@
     <attributes>
         <attr name="CURRENT" op="SUM" >
             <src type="child" name="socket0" />
+	    <src type="child" name="socket1" />
         </attr>
 	<attr name="VOLTAGE" op="SUM" >
             <src type="child" name="socket0" />
+	    <src type="child" name="socket1" />
         </attr>
         <attr name="POWER" op="SUM" >
             <src type="child" name="socket0" />
+	    <src type="child" name="socket1" />
         </attr>
     </attributes>
 
     <children>
         <child name="socket0" />
+	<child name="socket1" />
     </children>
 
 </obj>
@@ -84,6 +88,27 @@
     </attributes>
 
 </obj>
+
+<obj name="plat.node.socket1" type="Socket" >
+
+    <devices>
+        <dev name="wpdev0" device="WattProf-dev" openString="4" />
+    </devices>
+
+    <attributes>
+        <attr name="CURRENT" op="AVG">
+            <src type="device" name="wpdev0" />
+        </attr>
+        <attr name="POWER" op="AVG">
+            <src type="device" name="wpdev0" />
+        </attr>
+        <attr name="VOLTAGE" op="AVG">
+            <src type="device" name="wpdev0" />
+        </attr>
+    </attributes>
+
+</obj>
+
 
 </Objects>
 </System>
